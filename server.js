@@ -3,10 +3,15 @@ const session = require('express-session');
 const Database = require('better-sqlite3');
 const path = require('path');
 const crypto = require('crypto');
+const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const db = new Database(path.join(__dirname, 'data', 'hotel.db'));
+const PORT = 3000;
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
+}
+const db = new Database(path.join(dataDir, 'hotel.db'));
 db.pragma('foreign_keys = ON');
 
 db.exec(`
@@ -114,4 +119,4 @@ app.get('/api/admin/orders',admin,(req,res)=>{
 app.patch('/api/admin/orders/:id',admin,(req,res)=>{const {status}=req.body;if(!['pending','preparing','delivered','cancelled'].includes(status))return res.status(400).json({error:'Invalid status'});db.prepare('UPDATE food_orders SET status=? WHERE id=?').run(status,req.params.id);res.json({ok:true});});
 
 app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
-app.listen(PORT,()=>console.log(`Ujjal Hotel running at http://localhost:${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Ujjal Hotel running at http://0.0.0.0:${PORT}`));
