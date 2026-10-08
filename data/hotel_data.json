@@ -1,0 +1,168 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Ujjal Hotel Admin",
+      "email": "admin@ujjalhotel.com",
+      "password": "e86f78a8a3caf0b60d8e74e5942aa6d86dc150cd3c03338aef25b7d2d7e3acc7",
+      "role": "admin"
+    },
+    {
+      "id": 2,
+      "name": "Demo Customer",
+      "email": "customer@ujjalhotel.com",
+      "password": "98ec654a8df28f8f0f8f02220483d46916b85017de0b74d8ec755c28cb8539a8",
+      "role": "customer"
+    },
+    {
+      "id": 3,
+      "name": "Alice Tester",
+      "email": "alice@test.com",
+      "password": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "customer"
+    }
+  ],
+  "rooms": [
+    {
+      "id": 1,
+      "number": "101",
+      "type": "Deluxe Room",
+      "price": 2200,
+      "description": "Comfortable room with king bed, Wi-Fi, TV and attached bathroom",
+      "image": "",
+      "active": 1
+    },
+    {
+      "id": 2,
+      "number": "102",
+      "type": "Deluxe Room",
+      "price": 2200,
+      "description": "Spacious room with king bed and mountain-facing window",
+      "image": "",
+      "active": 1
+    },
+    {
+      "id": 3,
+      "number": "201",
+      "type": "Premium Room",
+      "price": 3200,
+      "description": "Premium room with balcony, breakfast and scenic view",
+      "image": "",
+      "active": 1
+    },
+    {
+      "id": 4,
+      "number": "202",
+      "type": "Premium Room",
+      "price": 3200,
+      "description": "Premium room with balcony and king bed",
+      "image": "",
+      "active": 1
+    },
+    {
+      "id": 5,
+      "number": "301",
+      "type": "Family Suite",
+      "price": 4800,
+      "description": "Large suite for families with two beds and living area",
+      "image": "",
+      "active": 1
+    },
+    {
+      "id": 6,
+      "number": "302",
+      "type": "Family Suite",
+      "price": 4800,
+      "description": "Large family suite with two bedrooms and lounge",
+      "image": "",
+      "active": 1
+    }
+  ],
+  "bookings": [
+    {
+      "id": 1,
+      "user_id": 3,
+      "room_id": 1,
+      "check_in": "2026-10-10",
+      "check_out": "2026-10-12",
+      "guests": 2,
+      "status": "confirmed",
+      "created_at": "2026-10-08 18:14:58"
+    }
+  ],
+  "menu_items": [
+    {
+      "id": 1,
+      "name": "Veg Thali",
+      "category": "Main Course",
+      "price": 180,
+      "available": 1
+    },
+    {
+      "id": 2,
+      "name": "Chicken Biryani",
+      "category": "Main Course",
+      "price": 260,
+      "available": 1
+    },
+    {
+      "id": 3,
+      "name": "Paneer Butter Masala",
+      "category": "Main Course",
+      "price": 220,
+      "available": 1
+    },
+    {
+      "id": 4,
+      "name": "Fried Rice",
+      "category": "Main Course",
+      "price": 160,
+      "available": 1
+    },
+    {
+      "id": 5,
+      "name": "French Fries",
+      "category": "Snacks",
+      "price": 120,
+      "available": 1
+    },
+    {
+      "id": 6,
+      "name": "Chicken Momos",
+      "category": "Snacks",
+      "price": 170,
+      "available": 1
+    },
+    {
+      "id": 7,
+      "name": "Masala Tea",
+      "category": "Beverage",
+      "price": 60,
+      "available": 1
+    },
+    {
+      "id": 8,
+      "name": "Cold Coffee",
+      "category": "Beverage",
+      "price": 110,
+      "available": 1
+    },
+    {
+      "id": 9,
+      "name": "Mineral Water",
+      "category": "Beverage",
+      "price": 30,
+      "available": 1
+    }
+  ],
+  "food_orders": [],
+  "food_order_items": [],
+  "counters": {
+    "users": 3,
+    "rooms": 6,
+    "bookings": 1,
+    "menu_items": 9,
+    "food_orders": 0,
+    "food_order_items": 0
+  }
+}

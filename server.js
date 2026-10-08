@@ -1,17 +1,13 @@
 const express = require('express');
 const session = require('express-session');
-const Database = require('better-sqlite3');
+const Database = require('./db');
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
 
 const app = express();
-const PORT = 3000;
-const dataDir = path.join(__dirname, 'data');
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
-const db = new Database(path.join(dataDir, 'hotel.db'));
+const PORT = process.env.PORT || 3000;
+const db = new Database();
 db.pragma('foreign_keys = ON');
 
 db.exec(`
@@ -46,29 +42,76 @@ function seed() {
 }
 seed();
 
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
-app.use(session({secret:process.env.SESSION_SECRET || 'ujjal-hotel-change-this-secret',resave:false,saveUninitialized:false,cookie:{httpOnly:true,maxAge:1000*60*60*8}}));
+app.use(session({secret:process.env.SESSION_SECRET || 'ujjal-hotel-change-this-secret',resave:false,saveUninitialized:false,cookie:{httpOnly:true,maxAge:1000*60*60*24}}));
 app.use(express.static(path.join(__dirname,'public')));
 
-function auth(req,res,next){ if(!req.session.user) return res.status(401).json({error:'Please login first'}); next(); }
-function admin(req,res,next){ if(!req.session.user || req.session.user.role!=='admin') return res.status(403).json({error:'Admin access required'}); next(); }
+const authTokens = new Map();
+
+function getUser(req) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim();
+    if (authTokens.has(token)) {
+      return authTokens.get(token);
+    }
+  }
+  return (req.session && req.session.user) ? req.session.user : null;
+}
+
+function auth(req,res,next){
+  const user = getUser(req);
+  if(!user) return res.status(401).json({error:'Please login first'});
+  req.user = user;
+  if (req.session) req.session.user = user;
+  next();
+}
+
+function admin(req,res,next){
+  const user = getUser(req);
+  if(!user || user.role!=='admin') return res.status(403).json({error:'Admin access required'});
+  req.user = user;
+  if (req.session) req.session.user = user;
+  next();
+}
 function validDates(a,b){ return /^\d{4}-\d{2}-\d{2}$/.test(a) && /^\d{4}-\d{2}-\d{2}$/.test(b) && a < b; }
 
 app.post('/api/login',(req,res)=>{
   const {email,password}=req.body; const hash=crypto.createHash('sha256').update(password||'').digest('hex');
   const user=db.prepare('SELECT id,name,email,role FROM users WHERE email=? AND password=?').get(email,hash);
   if(!user) return res.status(401).json({error:'Invalid email or password'});
-  req.session.user=user; res.json({user});
+  const token = crypto.randomBytes(32).toString('hex');
+  authTokens.set(token, user);
+  if (req.session) req.session.user = user;
+  res.json({user, token});
 });
 app.post('/api/register',(req,res)=>{
   const {name,email,password}=req.body;
   if(!name||!email||!password||password.length<6) return res.status(400).json({error:'Name, email and password (6+ chars) are required'});
-  try { const hash=crypto.createHash('sha256').update(password).digest('hex'); const info=db.prepare('INSERT INTO users(name,email,password,role) VALUES(?,?,?,?)').run(name,email,hash,'customer'); const user={id:info.lastInsertRowid,name,email,role:'customer'}; req.session.user=user; res.json({user}); }
-  catch(e){ res.status(400).json({error:'Email already registered'}); }
+  try {
+    const hash=crypto.createHash('sha256').update(password).digest('hex');
+    const info=db.prepare('INSERT INTO users(name,email,password,role) VALUES(?,?,?,?)').run(name,email,hash,'customer');
+    const user={id:info.lastInsertRowid,name,email,role:'customer'};
+    const token = crypto.randomBytes(32).toString('hex');
+    authTokens.set(token, user);
+    if (req.session) req.session.user = user;
+    res.json({user, token});
+  } catch(e){ res.status(400).json({error:'Email already registered'}); }
 });
-app.post('/api/logout',(req,res)=>req.session.destroy(()=>res.json({ok:true})));
-app.get('/api/me',(req,res)=>res.json({user:req.session.user||null}));
+app.post('/api/logout',(req,res)=>{
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    authTokens.delete(authHeader.slice(7).trim());
+  }
+  if (req.session) {
+    req.session.destroy(()=>res.json({ok:true}));
+  } else {
+    res.json({ok:true});
+  }
+});
+app.get('/api/me',(req,res)=>res.json({user:getUser(req)}));
 
 app.get('/api/rooms',(req,res)=>{
   const {checkIn,checkOut}=req.query; let rooms=db.prepare('SELECT * FROM rooms WHERE active=1 ORDER BY CAST(number AS INTEGER)').all();
@@ -85,23 +128,23 @@ app.post('/api/bookings',auth,(req,res)=>{
   const room=db.prepare('SELECT * FROM rooms WHERE id=? AND active=1').get(roomId); if(!room) return res.status(404).json({error:'Room not found'});
   const clash=db.prepare(`SELECT 1 FROM bookings WHERE room_id=? AND status IN ('confirmed','checked_in') AND check_in < ? AND check_out > ? LIMIT 1`).get(roomId,checkOut,checkIn);
   if(clash) return res.status(409).json({error:'Room is already booked for those dates'});
-  const info=db.prepare('INSERT INTO bookings(user_id,room_id,check_in,check_out,guests) VALUES(?,?,?,?,?)').run(req.session.user.id,roomId,checkIn,checkOut,Math.max(1,Number(guests)||1));
+  const info=db.prepare('INSERT INTO bookings(user_id,room_id,check_in,check_out,guests) VALUES(?,?,?,?,?)').run(req.user.id,roomId,checkIn,checkOut,Math.max(1,Number(guests)||1));
   res.json({ok:true,bookingId:info.lastInsertRowid});
 });
-app.get('/api/my-bookings',auth,(req,res)=>res.json({bookings:db.prepare(`SELECT b.*,r.number,r.type,r.price FROM bookings b JOIN rooms r ON r.id=b.room_id WHERE b.user_id=? ORDER BY b.created_at DESC`).all(req.session.user.id)}));
+app.get('/api/my-bookings',auth,(req,res)=>res.json({bookings:db.prepare(`SELECT b.*,r.number,r.type,r.price FROM bookings b JOIN rooms r ON r.id=b.room_id WHERE b.user_id=? ORDER BY b.created_at DESC`).all(req.user.id)}));
 
 app.post('/api/orders',auth,(req,res)=>{
   const {roomId,items,note}=req.body;
   if(!roomId || !Array.isArray(items) || !items.length) return res.status(400).json({error:'Select food items and a room'});
-  const booking=db.prepare(`SELECT * FROM bookings WHERE user_id=? AND room_id=? AND status IN ('confirmed','checked_in') ORDER BY check_in DESC LIMIT 1`).get(req.session.user.id,roomId);
+  const booking=db.prepare(`SELECT * FROM bookings WHERE user_id=? AND room_id=? AND status IN ('confirmed','checked_in') ORDER BY check_in DESC LIMIT 1`).get(req.user.id,roomId);
   if(!booking) return res.status(400).json({error:'Food can be ordered only for one of your active booked rooms'});
   let total=0; const clean=[];
   for(const x of items){const m=db.prepare('SELECT * FROM menu_items WHERE id=? AND available=1').get(x.menuItemId); const q=Math.max(1,Number(x.quantity)||1); if(m){total+=m.price*q;clean.push({m,q});}}
   if(!clean.length) return res.status(400).json({error:'No valid food items'});
-  const tx=db.transaction(()=>{const o=db.prepare('INSERT INTO food_orders(user_id,room_id,booking_id,total,note) VALUES(?,?,?,?,?)').run(req.session.user.id,roomId,booking.id,total,note||''); const add=db.prepare('INSERT INTO food_order_items(order_id,menu_item_id,quantity,price) VALUES(?,?,?,?)'); clean.forEach(x=>add.run(o.lastInsertRowid,x.m.id,x.q,x.m.price)); return o.lastInsertRowid;});
+  const tx=db.transaction(()=>{const o=db.prepare('INSERT INTO food_orders(user_id,room_id,booking_id,total,note) VALUES(?,?,?,?,?)').run(req.user.id,roomId,booking.id,total,note||''); const add=db.prepare('INSERT INTO food_order_items(order_id,menu_item_id,quantity,price) VALUES(?,?,?,?)'); clean.forEach(x=>add.run(o.lastInsertRowid,x.m.id,x.q,x.m.price)); return o.lastInsertRowid;});
   res.json({ok:true,orderId:tx()});
 });
-app.get('/api/my-orders',auth,(req,res)=>res.json({orders:db.prepare(`SELECT o.*,r.number FROM food_orders o JOIN rooms r ON r.id=o.room_id WHERE o.user_id=? ORDER BY o.created_at DESC`).all(req.session.user.id)}));
+app.get('/api/my-orders',auth,(req,res)=>res.json({orders:db.prepare(`SELECT o.*,r.number FROM food_orders o JOIN rooms r ON r.id=o.room_id WHERE o.user_id=? ORDER BY o.created_at DESC`).all(req.user.id)}));
 
 app.get('/api/admin/summary',admin,(req,res)=>{
   const rooms=db.prepare('SELECT COUNT(*) c FROM rooms WHERE active=1').get().c;
@@ -119,4 +162,9 @@ app.get('/api/admin/orders',admin,(req,res)=>{
 app.patch('/api/admin/orders/:id',admin,(req,res)=>{const {status}=req.body;if(!['pending','preparing','delivered','cancelled'].includes(status))return res.status(400).json({error:'Invalid status'});db.prepare('UPDATE food_orders SET status=? WHERE id=?').run(status,req.params.id);res.json({ok:true});});
 
 app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
-app.listen(PORT, '0.0.0.0', () => console.log(`Ujjal Hotel running at http://0.0.0.0:${PORT}`));
+
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => console.log(`Ujjal Hotel running at http://0.0.0.0:${PORT}`));
+}
+
+module.exports = app;
